@@ -3,15 +3,15 @@
 #include <mpi.h>
 #include "mpi_functions.h"
 
-#define N_ROWS 5
-#define N_COLS 5
+#define N_ROW 5
+#define N_COL 5
 
 
 void initialize_mpi(int *rank, MPI_Comm *comm) {
     MPI_Init(NULL, NULL);
     MPI_Comm_rank(MPI_COMM_WORLD, rank);
 
-    int dims[2] = {N_ROWS, N_COLS};
+    int dims[2] = {N_ROW, N_COL};
     int periods[2] = {0};
     MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, comm);
 }
@@ -29,7 +29,7 @@ void print_generated_data(int rank, int data, int *coords) {
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
-    for (int i = 0; i < N_ROWS * N_COLS; i++) {
+    for (int i = 0; i < N_ROW * N_COL; i++) {
         if (i == rank) {
             printf("│ %4d │ (%2d,%2d) │ %d                     \n", 
                    rank, coords[0], coords[1], data);
@@ -52,7 +52,7 @@ void print_broadcast_data(int rank, int best_rank, int *best_coords, int data) {
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
-    for (int i = 0; i < N_ROWS * N_COLS; i++) {
+    for (int i = 0; i < N_ROW * N_COL; i++) {
         if (i == rank) {
             printf(" %4d │ %9d │ (%2d,%2d)     │ %d           \n", 
                    rank, best_rank, best_coords[0], best_coords[1], data);
