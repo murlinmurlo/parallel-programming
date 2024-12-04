@@ -6,13 +6,11 @@
 #define N_ROW 5
 #define N_COL 5
 
-
-
 /**
  * @brief Exchanges data between MPI processes.
  *
  * This function facilitates communication between two processes in a 
- * distributed computing environment using MPI. It can either is_sending or 
+ * distributed computing environment using MPI. It can either send or 
  * receive data based on the value of the `is_sending` parameter.
  */
 void exchange_data(int neighbour_row, int neighbour_col, 
@@ -38,11 +36,10 @@ void exchange_data(int neighbour_row, int neighbour_col,
     }
 }
 
-
 /**
  * @brief Performs reduction operation to find the maximum value.
  *
- * This function exchange_datas with neighboring processes to find the 
+ * This function exchanges data with neighboring processes to find the 
  * maximum value across the grid of processes.
  */
 void find_max(int *data, int *best_rank, MPI_Comm comm, int coord[2]) {
@@ -52,42 +49,41 @@ void find_max(int *data, int *best_rank, MPI_Comm comm, int coord[2]) {
     int row = coord[0];
     int col = coord[1];
 
-    // Определяем направление для отправки и получения
     int directions[2][2];
 
-    // Обработка по оси X
+    // Processing along the X axis
     switch (row) {
         case 0:
         case 1:
             if (row > 0) {
-                directions[0][0] = row - 1; directions[0][1] = col; // вверх
+                directions[0][0] = row - 1; directions[0][1] = col;
                 exchange_data(directions[0][0], directions[0][1], &neighbour_data, &neighbour_rank, data, best_rank, 0, comm);
             }
-            directions[1][0] = row + 1; directions[1][1] = col; // вниз
+            directions[1][0] = row + 1; directions[1][1] = col;
             exchange_data(directions[1][0], directions[1][1], &neighbour_data, &neighbour_rank, data, best_rank, is_sending, comm);
             break;
 
         case 3:
         case 4:
             if (row < 4) {
-                directions[1][0] = row + 1; directions[1][1] = col; // вниз
+                directions[1][0] = row + 1; directions[1][1] = col;
                 exchange_data(directions[1][0], directions[1][1], &neighbour_data, &neighbour_rank, data, best_rank, 0, comm);
             }
-            directions[0][0] = row - 1; directions[0][1] = col; // вверх
+            directions[0][0] = row - 1; directions[0][1] = col;
             exchange_data(directions[0][0], directions[0][1], &neighbour_data, &neighbour_rank, data, best_rank, is_sending, comm);
             break;
 
         default:
-            // Обработка по оси Y
-            directions[0][0] = row - 1; directions[0][1] = col; // вверх
-            directions[1][0] = row + 1; directions[1][1] = col; // вниз
+            // Processing along the Y axis
+            directions[0][0] = row - 1; directions[0][1] = col; // up
+            directions[1][0] = row + 1; directions[1][1] = col; // down
             for (int i = 0; i < 2; i++) {
                 exchange_data(directions[i][0], directions[i][1], &neighbour_data, &neighbour_rank, data, best_rank, 0, comm);
             }
 
-            // Обработка по оси Y
-            directions[0][0] = row; directions[0][1] = col - 1; // влево
-            directions[1][0] = row; directions[1][1] = col + 1; // вправо
+            // Processing along the Y axis
+            directions[0][0] = row; directions[0][1] = col - 1; // left
+            directions[1][0] = row; directions[1][1] = col + 1; // right
 
             if (col > 0) {
                 exchange_data(directions[0][0], directions[0][1], &neighbour_data, &neighbour_rank, data, best_rank, 0, comm);
@@ -113,26 +109,26 @@ void send_to_all(int *data, int *best_rank, MPI_Comm comm, int coord[2]) {
     switch (coord[0]) {
         case 0:
         case 1:
-            // Передача вниз
+            // Sending down
             exchange_data(coord[0] + 1, coord[1], &other_data, &other_rank, data, best_rank, !is_sending, comm);
             if (coord[0] > 0) {
-                // Передача вверх
+                // Sending up
                 exchange_data(coord[0] - 1, coord[1], &other_data, &other_rank, data, best_rank, is_sending, comm);
             }
             break;
 
         case 3:
         case 4:
-            // Передача вверх
+            // Sending up
             exchange_data(coord[0] - 1, coord[1], &other_data, &other_rank, data, best_rank, !is_sending, comm);
             if (coord[0] < 4) {
-                // Передача вниз
+                // Sending down
                 exchange_data(coord[0] + 1, coord[1], &other_data, &other_rank, data, best_rank, is_sending, comm);
             }
             break;
 
         default:
-            // Обработка по горизонтали (осе Y)
+            // Processing horizontally (Y axis)
             switch (coord[1]) {
                 case 0:
                 case 1:
@@ -151,12 +147,12 @@ void send_to_all(int *data, int *best_rank, MPI_Comm comm, int coord[2]) {
                     break;
 
                 default:
-                    // Передача по обеим осям
+                    // Sending along both axes
                     exchange_data(coord[0], coord[1] - 1, &other_data, &other_rank, data, best_rank, is_sending, comm);
                     exchange_data(coord[0], coord[1] + 1, &other_data, &other_rank, data, best_rank, is_sending, comm);
                     break;
             }
-            // Передача по вертикали
+            // Sending vertically
             exchange_data(coord[0] - 1, coord[1], &other_data, &other_rank, data, best_rank, is_sending, comm);
             exchange_data(coord[0] + 1, coord[1], &other_data, &other_rank, data, best_rank, is_sending, comm);
             break;
