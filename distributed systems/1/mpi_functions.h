@@ -4,7 +4,7 @@
 #include <mpi.h>
 
 void exchange_data(int neighbour_row, int neighbour_col, 
-                 int *recv_data, int *recv_rank, 
+                 int *recive_data, int *recive_rank, 
                  int *data, int *best_rank, 
                  int is_sending, MPI_Comm comm);
 

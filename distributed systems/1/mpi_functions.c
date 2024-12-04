@@ -16,7 +16,7 @@
  * receive data based on the value of the `is_sending` parameter.
  */
 void exchange_data(int neighbour_row, int neighbour_col, 
-                 int *recv_data, int *recv_rank, 
+                 int *recive_data, int *recive_rank, 
                  int *data, int *best_rank, 
                  int is_sending, MPI_Comm comm) {
     int neighbour_coords[2] = {neighbour_row, neighbour_col};
@@ -28,12 +28,12 @@ void exchange_data(int neighbour_row, int neighbour_col,
         MPI_Send(data, 1, MPI_INT, neighbour_rank, 0, comm);
     } else {
         MPI_Status status;
-        MPI_Recv(recv_rank, 1, MPI_INT, neighbour_rank, 0, comm, &status);
-        MPI_Recv(recv_data, 1, MPI_INT, neighbour_rank, 0, comm, &status);
+        MPI_Recv(recive_rank, 1, MPI_INT, neighbour_rank, 0, comm, &status);
+        MPI_Recv(recive_data, 1, MPI_INT, neighbour_rank, 0, comm, &status);
         
-        if (*recv_data > *data) {
-            *data = *recv_data;
-            *best_rank = *recv_rank;
+        if (*recive_data > *data) {
+            *data = *recive_data;
+            *best_rank = *recive_rank;
         }
     }
 }

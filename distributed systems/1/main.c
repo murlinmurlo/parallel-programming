@@ -47,7 +47,7 @@ void print_broadcast_data(int rank, int best_rank, int *best_coords, int data) {
     if (rank == 0) { 
         printf("\nRESULT DATA:\n");
         printf("───────────────────────────────────────────────\n");
-        printf(" Rank │ Best Rank │ Best Coords │ Data         \n");
+        printf(" Rank │ Best Rank │ Coords      │ Value        \n");
         printf("───────────────────────────────────────────────\n");
     }
     MPI_Barrier(MPI_COMM_WORLD);

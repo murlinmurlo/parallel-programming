@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <mpi.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define N_ROW 5
 #define N_COL 5
@@ -12,9 +13,9 @@ int rank;
 
 
 void exchange_data(int neighbour_row, int neighbour_col, 
-                 int *recv_data, int *recv_rank, 
+                 int *recive_data, int *recive_rank, 
                  int *data, int *best_rank, 
-                 int is_sending, MPI_Comm comm) {
+                 bool is_sending, MPI_Comm comm) {
     
     int neighbour_coords[2] = {neighbour_row, neighbour_col};
     int neighbour_rank;
@@ -25,12 +26,12 @@ void exchange_data(int neighbour_row, int neighbour_col,
         MPI_Send(data, 1, MPI_INT, neighbour_rank, 0, comm);
     } else {
         MPI_Status status;
-        MPI_Recv(recv_rank, 1, MPI_INT, neighbour_rank, 0, comm, &status);
-        MPI_Recv(recv_data, 1, MPI_INT, neighbour_rank, 0, comm, &status);
+        MPI_Recv(recive_rank, 1, MPI_INT, neighbour_rank, 0, comm, &status);
+        MPI_Recv(recive_data, 1, MPI_INT, neighbour_rank, 0, comm, &status);
         
-        if (*recv_data > *data) {
-            *data = *recv_data;
-            *best_rank = *recv_rank;
+        if (*recive_data > *data) {
+            *data = *recive_data;
+            *best_rank = *recive_rank;
         }
     }
 }
@@ -42,7 +43,6 @@ void find_max(
     MPI_Comm comm,
     int coord[2]
 ) {
-    int is_sending = 1;
     int neighbour_rank;
     int neighbour_data;
     int row = coord[0];
@@ -114,7 +114,7 @@ void find_max(
 
 
 void send_to_all(int *data, int *best_rank, MPI_Comm comm, int coord[2]) {
-    int is_sending = 1;
+    bool is_sending = 1;
     int neighbour_rank;
     int neighbour_data;
 
