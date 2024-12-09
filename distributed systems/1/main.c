@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
     find_max(&data, &best_rank, comm, coords);
     MPI_Barrier(comm);
 
-    is_sending_to_all(&data, &best_rank, comm, coords);
+    send_to_all(&data, &best_rank, comm, coords);
     MPI_Barrier(comm);
 
     int best_coords[2];
