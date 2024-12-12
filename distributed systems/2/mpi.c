@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <mpi.h>
+#include <mpi-ext.h>
 #include <sys/time.h>
 
 #define  Max(a,b) ((a)>(b)?(a):(b))
@@ -17,58 +18,68 @@ void relax(int start, int end, int rank);
 void resid(int start, int end, int rank);
 void init(int start, int end, int rank);
 void verify(int start, int end, int rank);
-void exchange_rows(int rank, int size, int rows);
+int exchange_rows(int rank, int size, int rows);
 void write_checkpoint(int rank);
 void read_checkpoint(int rank);
+void solver(int rank, int size, int rows);
 
-void exchange_rows(int rank, int size, int rows) {
+int exchange_rows(int rank, int size, int rows) {
     MPI_Request request;
+    int err;
 
     // Чтение данных из файла при входе в функцию
     if (rank == 0) {
         read_checkpoint(rank);
     }
 
-    if (rank != 0)
-        MPI_Isend(local_A + 2 * N, 2 * N, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, &request);
-    if (rank != size - 1)
-        MPI_Isend(local_A + rows * N, 2 * N, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, &request);
-    if (rank != 0)
-        MPI_Irecv(local_A, 2 * N, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, &request);
-    if (rank != size - 1)
-        MPI_Irecv(local_A + (rows + 2) * N, 2 * N, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, &request);
+    // Отправка и получение данных с обработкой ошибок
+    if (rank != 0) {
+        err = MPI_Isend(local_A + 2 * N, 2 * N, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, &request);
+        if (err != MPI_SUCCESS) {
+            printf("Ошибка при отправке данных от процесса %d к %d\n", rank, rank - 1);
+            return -1; // Возврат ошибки
+        }
+    }
     
+    if (rank != size - 1) {
+        err = MPI_Isend(local_A + rows * N, 2 * N, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, &request);
+        if (err != MPI_SUCCESS) {
+            printf("Ошибка при отправке данных от процесса %d к %d\n", rank, rank + 1);
+            return -1; // Возврат ошибки
+        }
+    }
+    
+    if (rank != 0) {
+        err = MPI_Irecv(local_A, 2 * N, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, &request);
+        if (err != MPI_SUCCESS) {
+            printf("Ошибка при получении данных от процесса %d\n", rank - 1);
+            return -1; // Возврат ошибки
+        }
+    }
+    
+    if (rank != size - 1) {
+        err = MPI_Irecv(local_A + (rows + 2) * N, 2 * N, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, &request);
+        if (err != MPI_SUCCESS) {
+            printf("Ошибка при получении данных от процесса %d\n", rank + 1);
+            return -1; // Возврат ошибки
+        }
+    }
+
     MPI_Barrier(MPI_COMM_WORLD);
+    return 0; // Успех
 }
 
-void write_checkpoint(int rank) {
-    if (rank == 0) {
-        FILE *f = fopen("checkpoint.txt", "w");
-        if (f != NULL) {
-            for (i = 0; i < N; i++) {
-                fprintf(f, "%lf\n", local_A[i]);
-            }
-            fclose(f);
-        } else {
-            printf("Ошибка при открытии файла для записи.\n");
-        }
+void solver(int rank, int size, int rows) {
+    int result = exchange_rows(rank, size, rows);
+    if (result < 0) {
+        // Уменьшаем коммуникатор
+        MPI_Comm new_comm;
+        MPIX_Comm_shrink(MPI_COMM_WORLD, &new_comm);
+        
+        // Рекурсивный вызов solver
+        solver(rank, size, rows);
     }
 }
-
-void read_checkpoint(int rank) {
-    if (rank == 0) {
-        FILE *f = fopen("checkpoint.txt", "r");
-        if (f != NULL) {
-            for (i = 0; i < N; i++) {
-                fscanf(f, "%lf", &local_A[i]);
-            }
-            fclose(f);
-        } else {
-            printf("Ошибка при открытии файла для чтения.\n");
-        }
-    }
-}
-
 
 int main(int argc, char **argv) {
     int it, rank, size;
@@ -115,7 +126,7 @@ int main(int argc, char **argv) {
     write_checkpoint(rank);
 
     for (it = 1; it <= itmax; it++) {
-        exchange_rows(rank, size, rows);
+        solver(rank, size, rows);
         eps = 0.;
         relax(start, end, rank);
         if (rank == 0)
@@ -157,6 +168,9 @@ int main(int argc, char **argv) {
     MPI_Finalize();
     return 0;
 }
+
+// Остальные функции остаются без изменений
+
 
 void init(int start, int end, int rank)
 { 
@@ -220,4 +234,32 @@ void verify(int start,int end, int rank)
     if (rank == 0)
     printf("  S = %f\n",s);
     
+}
+
+void write_checkpoint(int rank) {
+    if (rank == 0) {
+        FILE *f = fopen("checkpoint.txt", "w");
+        if (f != NULL) {
+            for (i = 0; i < N; i++) {
+                fprintf(f, "%lf\n", local_A[i]);
+            }
+            fclose(f);
+        } else {
+            printf("Ошибка при открытии файла для записи.\n");
+        }
+    }
+}
+
+void read_checkpoint(int rank) {
+    if (rank == 0) {
+        FILE *f = fopen("checkpoint.txt", "r");
+        if (f != NULL) {
+            for (i = 0; i < N; i++) {
+                fscanf(f, "%lf", &local_A[i]);
+            }
+            fclose(f);
+        } else {
+            printf("Ошибка при открытии файла для чтения.\n");
+        }
+    }
 }
