@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <mpi.h>
 #include <sys/time.h>
-#include <unistd.h>
 
 #define  Max(a,b) ((a)>(b)?(a):(b))
 #define  N   (2*2*2*2*2*2+2)
@@ -11,32 +10,67 @@ double   maxeps = 0.1e-7;
 int itmax = 100;
 int i, j, k;
 double eps;
-double *local_A, *local_B;
+double *local_B, *local_A;
 int *recvcounts, *dislps;
 
 void relax(int start, int end, int rank);
 void resid(int start, int end, int rank);
 void init(int start, int end, int rank);
 void verify(int start, int end, int rank);
-void save_checkpoint(int rank, int size, int iteration, double* local_A, double* local_B);
-void load_checkpoint(int rank, int size, int* iteration, double* local_A, double* local_B);
-void worker_recovery(int rank, int size);
+void exchange_rows(int rank, int size, int rows);
+void write_checkpoint(int rank);
+void read_checkpoint(int rank);
 
-void exchange_rows(int rank, int size, int rows){
+void exchange_rows(int rank, int size, int rows) {
     MPI_Request request;
+
+    // Чтение данных из файла при входе в функцию
+    if (rank == 0) {
+        read_checkpoint(rank);
+    }
+
     if (rank != 0)
         MPI_Isend(local_A + 2 * N, 2 * N, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, &request);
     if (rank != size - 1)
         MPI_Isend(local_A + rows * N, 2 * N, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, &request);
     if (rank != 0)
-        MPI_Irecv( local_A , 2*N , MPI_DOUBLE, rank - 1 , 0 , MPI_COMM_WORLD , &request);
-    if (rank != size-1)
-        MPI_Irecv( local_A + (rows+2)*N , 2*N , MPI_DOUBLE, rank + 1 , 0 , MPI_COMM_WORLD , &request);
+        MPI_Irecv(local_A, 2 * N, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, &request);
+    if (rank != size - 1)
+        MPI_Irecv(local_A + (rows + 2) * N, 2 * N, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, &request);
+    
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-int main(int argc, char **argv)
-{
+void write_checkpoint(int rank) {
+    if (rank == 0) {
+        FILE *f = fopen("checkpoint.txt", "w");
+        if (f != NULL) {
+            for (i = 0; i < N; i++) {
+                fprintf(f, "%lf\n", local_A[i]);
+            }
+            fclose(f);
+        } else {
+            printf("Ошибка при открытии файла для записи.\n");
+        }
+    }
+}
+
+void read_checkpoint(int rank) {
+    if (rank == 0) {
+        FILE *f = fopen("checkpoint.txt", "r");
+        if (f != NULL) {
+            for (i = 0; i < N; i++) {
+                fscanf(f, "%lf", &local_A[i]);
+            }
+            fclose(f);
+        } else {
+            printf("Ошибка при открытии файла для чтения.\n");
+        }
+    }
+}
+
+
+int main(int argc, char **argv) {
     int it, rank, size;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); 
@@ -44,76 +78,77 @@ int main(int argc, char **argv)
     MPI_Status status;
     struct timeval starttime, stoptime;
     gettimeofday(&starttime, NULL);
-    int rows = N%size > rank ? N / size + 1: N / size;
-    local_A = (double*)malloc(N*(rows+4)*sizeof(double));
-    local_B = (double*)malloc(N*rows*sizeof(double));
+    
+    int rows = N % size > rank ? N / size + 1 : N / size;
+    local_A = (double*)malloc(N * (rows + 4) * sizeof(double));
+    local_B = (double*)malloc(N * rows * sizeof(double));
 
-    int start = rank == 0? 2 : rank*(N/size);
-    if (N%size > rank){
+    int start = rank == 0 ? 2 : rank * (N / size);
+    if (N % size > rank) {
         start += rank;
     } else {
         start += N % size;
     }
 
-    int end = (rank+1)*(N/size);
-    if (N%size > rank){
+    int end = (rank + 1) * (N / size);
+    if (N % size > rank) {
         end += rank;
     } else {
-        end += N % size-1;
+        end += N % size - 1;
     }
     
-    if (rank == size-1)
-        end = N-3;
+    if (rank == size - 1)
+        end = N - 3;
+
+    // Инициализация данных
     if (rank == 0)
-        init(start-2, end, rank);
-    else{
-        if (rank == size-1)
-        init(start,end+2,rank);
+        init(start - 2, end, rank);
+    else {
+        if (rank == size - 1)
+            init(start, end + 2, rank);
         else 
-        init(start, end,rank);
+            init(start, end, rank);
     }
 
-    int iteration = 0;
-    while (iteration <= itmax)
-    {
+    // Запись данных в файл перед началом вычислений
+    write_checkpoint(rank);
+
+    for (it = 1; it <= itmax; it++) {
         exchange_rows(rank, size, rows);
         eps = 0.;
         relax(start, end, rank);
         if (rank == 0)
-        resid(start-1,end,rank);
-        else{
-            if (rank == size-1)
-                resid(start,end+1, rank);
-            else resid(start, end, rank);
+            resid(start - 1, end, rank);
+        else {
+            if (rank == size - 1)
+                resid(start, end + 1, rank);
+            else 
+                resid(start, end, rank);
         }
         
         if (rank == 0)
-        printf("it=%4i   eps=%f\n", iteration, eps);
+            printf("it=%4i   eps=%f\n", it, eps);
 
         if (eps < maxeps)
             break;
-
-        // Save checkpoint
-        save_checkpoint(rank, size, iteration, local_A, local_B);
-
-        iteration++;
     }
 
     if (rank == 0)
-        verify(start-2, end, rank);
-    else{
-        if (rank == size-1)
-        verify(start,end+2,rank);
+        verify(start - 2, end, rank);
+    else {
+        if (rank == size - 1)
+            verify(start, end + 2, rank);
         else 
-        verify(start, end,rank);
+            verify(start, end, rank);
     }
 
-    if (rank == 0){
+    if (rank == 0) {
         gettimeofday(&stoptime, NULL);
         long seconds = stoptime.tv_sec - starttime.tv_sec;
         long micsec  = stoptime.tv_usec - starttime.tv_usec;
-        FILE * F = fopen("mpi_times.txt", "a");
-        fprintf(F, "%f\n", seconds + micsec*1e-6);
+        FILE *F = fopen("mpi_times.txt", "a");
+        fprintf(F, "%f\n", seconds + micsec * 1e-6);
+        fclose(F);
     }
 
     free(local_A);
@@ -124,6 +159,7 @@ int main(int argc, char **argv)
 
 void init(int start, int end, int rank)
 { 
+    
     for (i = start; i <= end; i++)
     {
         for (j = 0; j <= N-1; j++)
@@ -164,6 +200,7 @@ void resid(int start,int end, int rank)
     }
 
     MPI_Allreduce(&tmp, &eps, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
 }
 
 void verify(int start,int end, int rank)
@@ -180,33 +217,6 @@ void verify(int start,int end, int rank)
     
     MPI_Reduce(&tmp, &s, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     if (rank == 0)
-        printf("Solution verification: %f\n", s);
-}
-
-void save_checkpoint(int rank, int size, int iteration, double* local_A, double* local_B) {
-    char filename[256];
-    sprintf(filename, "checkpoint_%d.bin", rank);
-    FILE* fp = fopen(filename, "wb");
-    fwrite(&iteration, sizeof(int), 1, fp);
-    fwrite(local_A, sizeof(double), N*(4+N/size), fp);
-    fwrite(local_B, sizeof(double), N*(N/size), fp);
-    fclose(fp);
-}
-
-void load_checkpoint(int rank, int size, int* iteration, double* local_A, double* local_B) {
-    char filename[256];
-    sprintf(filename, "checkpoint_%d.bin", rank);
-    FILE* fp = fopen(filename, "rb");
-    fread(iteration, sizeof(int), 1, fp);
-    fread(local_A, sizeof(double), N*(4+N/size), fp);
-    fread(local_B, sizeof(double), N*(N/size), fp);
-    fclose(fp);
-}
-
-void worker_recovery(int rank, int size) {
-    int iteration;
-    load_checkpoint(rank, size, &iteration, local_A, local_B);
-    printf("Worker %d recovered from checkpoint at iteration %d\n", rank, iteration);
-    // Synchronize with neighbors after recovery
-    exchange_rows(rank, size, N/size);
+    printf("  S = %f\n",s);
+    
 }
