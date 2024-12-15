@@ -31,7 +31,7 @@ void init(int start, int end, int rank);
 void verify(int start, int end, int rank);
 void write_checkpoint(int rank, int size, double *local_A, int rows);
 void read_checkpoint(int rank, int size, double *local_A, int rows);
-void solver(MPI_Comm *comm, int *errcode, ...);
+void handler(MPI_Comm *comm, int *errcode, ...);
     
 
 
@@ -57,7 +57,7 @@ int main(int argc, char **argv)
     communicator = MPI_COMM_WORLD;
     MPI_Init(&argc, &argv);
     MPI_Errhandler err_handler;
-    MPI_Comm_create_errhandler(solver, &err_handler);
+    MPI_Comm_create_errhandler(handler, &err_handler);
     MPI_Comm_set_errhandler(communicator, err_handler);
     MPI_Comm_rank(communicator, &rank); 
     MPI_Comm_size(communicator, &size); 
@@ -268,7 +268,7 @@ void read_checkpoint(int rank, int size, double *local_A, int rows) {
 	MPI_Barrier(communicator);
 }
 
-void solver(MPI_Comm *comm, int *errcode, ...){
+void handler(MPI_Comm *comm, int *errcode, ...){
     MPIX_Comm_shrink(communicator, &communicator); // 0 1 2 3 -- упал 1 стало 0 2 3 --> 0 1 2
                                                    //                                   2 3 0
     MPI_Barrier(communicator);
